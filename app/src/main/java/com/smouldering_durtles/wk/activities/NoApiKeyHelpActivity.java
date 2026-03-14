@@ -23,14 +23,22 @@ import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.inputmethod.EditorInfo;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smouldering_durtles.wk.GlobalSettings;
 import com.smouldering_durtles.wk.R;
+import com.smouldering_durtles.wk.db.Converters;
 import com.smouldering_durtles.wk.proxy.ViewProxy;
+import com.smouldering_durtles.wk.util.AsyncTask;
+import com.smouldering_durtles.wk.util.Logger;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 
 import javax.annotation.Nullable;
-
-import static com.smouldering_durtles.wk.Constants.NO_API_KEY_HELP_DOCUMENT;
-import static com.smouldering_durtles.wk.util.ObjectSupport.safe;
+import javax.net.ssl.HttpsURLConnection;
 
 /**
  * A simple activity only used as a helper to get the user to supply an API key.
@@ -41,6 +49,8 @@ import static com.smouldering_durtles.wk.util.ObjectSupport.safe;
  * </p>
  */
 public final class NoApiKeyHelpActivity extends AbstractActivity {
+    private static final Logger LOGGER = Logger.get(NoApiKeyHelpActivity.class);
+
     private final ViewProxy saveButton = new ViewProxy();
     private final ViewProxy apiKey = new ViewProxy();
 
@@ -102,6 +112,8 @@ public final class NoApiKeyHelpActivity extends AbstractActivity {
 
     /**
      * Handler for the save button. Save the API key that was entered.
+     * If a custom API URL is configured, performs a migration call to exchange
+     * the WaniKani API key for a custom backend token before proceeding.
      */
     private void saveApiKey() {
         safe(() -> {
@@ -109,8 +121,61 @@ public final class NoApiKeyHelpActivity extends AbstractActivity {
                 return;
             }
             disableInteraction();
-            GlobalSettings.Api.setApiKey(apiKey.getText());
-            goToMainActivity();
+            final String key = apiKey.getText();
+            GlobalSettings.Api.setApiKey(key);
+            final String customApiUrl = GlobalSettings.Api.getApiUrl();
+            if (!customApiUrl.equals("https://api.wanikani.com/v2")) {
+                new AsyncTask<String>() {
+                    @Override
+                    protected @Nullable String doInBackground() {
+                        return safe(null, () -> {
+                            final String migrateUrl = customApiUrl + "/migrate";
+                            final ObjectMapper mapper = Converters.getObjectMapper();
+                            final String requestBody = "{\"wanikani_api_key\":\"" + key + "\"}";
+                            LOGGER.info("Posting migration call to: %s", migrateUrl);
+                            final URL url = new URL(migrateUrl);
+                            final HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+                            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                            connection.setRequestMethod("POST");
+                            connection.setDoInput(true);
+                            connection.setDoOutput(true);
+                            connection.setAllowUserInteraction(false);
+                            connection.setConnectTimeout(10000);
+                            connection.setReadTimeout(30000);
+                            try (final OutputStream os = connection.getOutputStream()) {
+                                os.write(requestBody.getBytes(StandardCharsets.UTF_8));
+                            }
+                            connection.getHeaderFields();
+                            LOGGER.info("Migration response code: %d", connection.getResponseCode());
+                            try (final InputStream is = connection.getInputStream()) {
+                                final JsonNode responseNode = mapper.readTree(is);
+                                if (responseNode.has("token")) {
+                                    return responseNode.get("token").asText();
+                                }
+                            }
+                            return null;
+                        });
+                    }
+
+                    @Override
+                    protected void onPostExecute(final @Nullable String token) {
+                        safe(() -> {
+                            if (token != null && !token.isEmpty()) {
+                                GlobalSettings.Api.setApiToken(token);
+                                LOGGER.info("Custom backend token stored successfully");
+                            }
+                            goToMainActivity();
+                        });
+                    }
+
+                    @Override
+                    protected void onProgressUpdate(final Object[] values) {
+                        //
+                    }
+                }.execute();
+            } else {
+                goToMainActivity();
+            }
         });
     }
 }

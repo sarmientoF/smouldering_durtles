@@ -97,12 +97,16 @@ public abstract class ApiTask {
         try {
             String urlString = uri;
             if (!urlString.startsWith("https://") && !urlString.startsWith("http://")) {
-                urlString = "https://api.wanikani.com" + uri;
+                urlString = GlobalSettings.Api.getApiUrl() + uri;
             }
             final URL url = new URL(urlString);
             LOGGER.info("Fetching: %s", url);
             connection = (HttpsURLConnection) url.openConnection();
-            connection.setRequestProperty("Authorization", "Bearer " + GlobalSettings.Api.getApiKey());
+            final String token = GlobalSettings.Api.getApiToken();
+            final String authValue = token.isEmpty()
+                    ? "Bearer " + GlobalSettings.Api.getApiKey()
+                    : "Bearer " + token;
+            connection.setRequestProperty("Authorization", authValue);
             connection.setRequestProperty("Wanikani-Revision", Constants.API_VERSION);
             connection.setRequestProperty("User-Agent", Identification.APP_NAME_UA + "/" + BuildConfig.VERSION_NAME);
             connection.setRequestMethod("GET");
@@ -216,13 +220,17 @@ public abstract class ApiTask {
         try {
             String urlString = uri;
             if (!urlString.startsWith("https://") && !urlString.startsWith("http://")) {
-                urlString = "https://api.wanikani.com" + uri;
+                urlString = GlobalSettings.Api.getApiUrl() + uri;
             }
             final URL url = new URL(urlString);
             LOGGER.info("Posting: %s", url);
             LOGGER.info("Request body: %s", mapper.writerWithDefaultPrettyPrinter().writeValueAsString(requestBody));
             connection = (HttpsURLConnection) url.openConnection();
-            connection.setRequestProperty("Authorization", "Bearer " + GlobalSettings.Api.getApiKey());
+            final String token = GlobalSettings.Api.getApiToken();
+            final String authValue = token.isEmpty()
+                    ? "Bearer " + GlobalSettings.Api.getApiKey()
+                    : "Bearer " + token;
+            connection.setRequestProperty("Authorization", authValue);
             connection.setRequestProperty("Wanikani-Revision", Constants.API_VERSION);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("User-Agent", Identification.APP_NAME_UA + "/" + BuildConfig.VERSION_NAME);
@@ -387,7 +395,15 @@ public abstract class ApiTask {
         if (!pages.has("next_url")) {
             return null;
         }
-        return pages.get("next_url").textValue();
+        @Nullable String nextUrl = pages.get("next_url").textValue();
+        if (nextUrl != null) {
+            final String customApiUrl = GlobalSettings.Api.getApiUrl();
+            if (!customApiUrl.equals("https://api.wanikani.com/v2")
+                    && nextUrl.startsWith("https://api.wanikani.com/v2")) {
+                nextUrl = customApiUrl + nextUrl.substring("https://api.wanikani.com/v2".length());
+            }
+        }
+        return nextUrl;
     }
 
     /**

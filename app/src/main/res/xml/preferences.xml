@@ -77,6 +77,12 @@
             app:singleLineTitle="false"
             app:summary="This is only needed for resurrect functionality. Leave blank if you don't need it."/>
 
+        <EditTextPreference
+            android:key="api_url"
+            android:title="API URL"
+            android:summary="Custom API server URL (leave empty for default)"
+            android:defaultValue="" />
+
     </PreferenceScreen>
 
     <PreferenceScreen

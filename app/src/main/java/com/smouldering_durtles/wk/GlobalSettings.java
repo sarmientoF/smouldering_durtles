@@ -705,6 +705,42 @@ public final class GlobalSettings {
         }
 
         /**
+         * The custom API server URL. Falls back to the default WaniKani API if empty.
+         *
+         * @return the value
+         */
+        public static String getApiUrl() {
+            return prefs().getString("api_url", "https://api.wanikani.com/v2");
+        }
+
+        /**
+         * The custom API server URL.
+         *
+         * @param url the value
+         */
+        public static void setApiUrl(final String url) {
+            prefs().edit().putString("api_url", url).apply();
+        }
+
+        /**
+         * The custom auth token from a custom backend. Empty string means use the WaniKani API key.
+         *
+         * @return the value
+         */
+        public static String getApiToken() {
+            return prefs().getString("api_token", "");
+        }
+
+        /**
+         * The custom auth token from a custom backend.
+         *
+         * @param token the value
+         */
+        public static void setApiToken(final String token) {
+            prefs().edit().putString("api_token", token).apply();
+        }
+
+        /**
          * The rule for accessing the network (wifi only or always).
          *
          * @return the value
